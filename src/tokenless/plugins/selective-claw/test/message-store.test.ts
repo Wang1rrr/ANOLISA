@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createConnection, closeConnection } from "../src/db/connection.js";
 import { runMigrations } from "../src/db/migration.js";
 import { MessageStore } from "../src/store/message-store.js";
@@ -15,7 +15,57 @@ describe("MessageStore", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     closeConnection(db);
+  });
+
+  describe("prepared statement reuse", () => {
+    it("reuses fixed queries while rebinding sessions and observing writes", () => {
+      const prepare = vi.spyOn(db, "prepare");
+      for (const sessionId of ["s1", "s2"]) {
+        for (let seq = 1; seq <= 2; seq++) {
+          expect(store.getNextSeq(sessionId)).toBe(seq);
+          expect(store.getMaxTurnSeq(sessionId)).toBe(seq - 1);
+          store.createMessage({ sessionId, seq, turnSeq: seq, role: "user", content: `deployment ${sessionId} ${seq}`, tokenCount: 3 });
+          store.setTurnSummary(sessionId, seq, `summary ${sessionId} ${seq}`);
+          expect(store.getMessageCount(sessionId)).toBe(seq);
+          expect(store.getLastUserSeq(sessionId)).toBe(seq);
+          expect(store.getLastMessage(sessionId)?.content).toBe(`deployment ${sessionId} ${seq}`);
+          expect(store.getMessages(sessionId)).toHaveLength(seq);
+          expect(store.getDistinctTurnSeqs(sessionId)).toEqual(Array.from({ length: seq }, (_, index) => index + 1));
+          expect(store.getTurnSummaries(sessionId).at(-1)?.summary).toBe(`summary ${sessionId} ${seq}`);
+          expect(store.searchMessages(sessionId, "deployment", 5)).toHaveLength(seq);
+        }
+      }
+      const queries = prepare.mock.calls.map(([sql]) => sql);
+      expect(queries.length).toBe(new Set(queries).size);
+      expect(queries).toHaveLength(11);
+      expect(store.getMessages("s1").map((message) => message.content)).toEqual(["deployment s1 1", "deployment s1 2"]);
+      expect(store.getMessages("s2").map((message) => message.content)).toEqual(["deployment s2 1", "deployment s2 2"]);
+    });
+
+    it("does not retain arbitrarily sized turn-selection statements", () => {
+      store.createMessage({ sessionId: "s1", seq: 1, turnSeq: 1, role: "user", content: "one", tokenCount: 1 });
+      store.createMessage({ sessionId: "s1", seq: 2, turnSeq: 2, role: "user", content: "two", tokenCount: 1 });
+      const prepare = vi.spyOn(db, "prepare");
+      for (const turnSeqs of [[1], [1, 2], [2], [1, 2]]) {
+        expect(store.getMessagesByTurnSeqs("s1", turnSeqs).map((message) => message.turnSeq)).toEqual(turnSeqs);
+      }
+      expect(prepare).toHaveBeenCalledTimes(4);
+    });
+
+    it("recovers search when FTS becomes available after preparation failed", () => {
+      store.createMessage({ sessionId: "s1", seq: 1, turnSeq: 1, role: "user", content: "deployment plan", tokenCount: 2 });
+      db.exec("DROP TRIGGER messages_ai; DROP TRIGGER messages_ad; DROP TRIGGER messages_au; DROP TABLE messages_fts");
+      expect(store.searchMessages("s1", "deployment", 5)).toEqual([]);
+      expect(store.searchMessages("s1", "deployment", 5)).toEqual([]);
+      runMigrations(db);
+      store.createMessage({ sessionId: "s1", seq: 2, turnSeq: 2, role: "user", content: "recovered search", tokenCount: 2 });
+      const prepare = vi.spyOn(db, "prepare");
+      expect(store.searchMessages("s1", "recovered", 5).map((message) => message.content)).toEqual(["recovered search"]);
+      expect(store.searchMessages("s1", "recovered", 5)).toHaveLength(1);
+      expect(prepare).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe("messages", () => {
