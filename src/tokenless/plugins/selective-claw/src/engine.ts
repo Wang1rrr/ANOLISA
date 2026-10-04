@@ -12,6 +12,7 @@ import type { SelectiveClawConfig } from "./types.js";
 import type { SummarizeFn } from "./summarize.js";
 import { runMigrations } from "./db/migration.js";
 import { MessageStore } from "./store/message-store.js";
+import type { MessageRecord } from "./store/message-store.js";
 import { Assembler } from "./assembler.js";
 import { estimateTokens } from "./estimate-tokens.js";
 
@@ -110,6 +111,7 @@ export class SelectiveContextEngine implements ContextEngine {
       role,
       content,
       tokenCount: estimateTokens(content),
+      rawMessage: JSON.stringify(message),
     });
 
     return { ingested: true };
@@ -137,10 +139,7 @@ export class SelectiveContextEngine implements ContextEngine {
       if (stored.length === 0) {
         return { messages: [], estimatedTokens: 0 };
       }
-      messages = stored.map((m) => ({
-        role: m.role as string,
-        content: m.content,
-      }));
+      messages = stored.map((message) => this.restoreMessage(message));
     }
 
     const tokenBudget =
@@ -191,10 +190,7 @@ export class SelectiveContextEngine implements ContextEngine {
     const stored = this.store.getMessages(params.sessionId);
     if (stored.length === 0) return;
 
-    const messages: AgentMessage[] = stored.map((m) => ({
-      role: m.role as string,
-      content: m.content,
-    }));
+    const messages = stored.map((message) => this.restoreMessage(message));
     const turns = this.deriveTurns(messages);
     this.cacheTurnMessages(params.sessionId, turns);
 
@@ -290,6 +286,7 @@ export class SelectiveContextEngine implements ContextEngine {
         role,
         content,
         tokenCount: estimateTokens(content),
+        rawMessage: JSON.stringify(msg),
       });
       seq++;
     }
@@ -397,6 +394,20 @@ export class SelectiveContextEngine implements ContextEngine {
     }
     this.turnSummaryCache.set(sessionId, map);
     return map;
+  }
+
+  private restoreMessage(message: MessageRecord): AgentMessage {
+    if (message.rawMessage) {
+      try {
+        const raw = JSON.parse(message.rawMessage);
+        if (raw && typeof raw === "object" && !Array.isArray(raw) && typeof raw.role === "string") {
+          return raw as AgentMessage;
+        }
+      } catch {
+        // Older archives may contain incomplete raw payloads.
+      }
+    }
+    return { role: message.role, content: message.content };
   }
 
   private extractContent(message: AgentMessage): string {
