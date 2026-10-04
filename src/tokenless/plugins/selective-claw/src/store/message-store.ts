@@ -159,7 +159,11 @@ export class MessageStore {
   setTurnSummary(sessionId: string, turnSeq: number, summary: string): void {
     this.db.prepare(`
       UPDATE messages SET summary = ?
-      WHERE session_id = ? AND turn_seq = ? AND role = 'user'
+      WHERE message_id = (
+        SELECT message_id FROM messages
+        WHERE session_id = ? AND turn_seq = ?
+        ORDER BY seq ASC LIMIT 1
+      )
     `).run(summary, sessionId, turnSeq);
   }
 

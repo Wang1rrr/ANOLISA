@@ -109,6 +109,21 @@ describe("MessageStore", () => {
   });
 
   describe("turn summaries", () => {
+    it.each(["system", "assistant", "tool"] as const)("persists and overwrites a %s-led turn summary", (role) => {
+      store.createMessage({ sessionId: "s1", seq: 1, turnSeq: 1, role, content: "first message", tokenCount: 1 });
+      store.createMessage({ sessionId: "s1", seq: 2, turnSeq: 1, role: "assistant", content: "continuation", tokenCount: 1 });
+      store.createMessage({ sessionId: "s1", seq: 3, turnSeq: 2, role: "user", content: "next turn", tokenCount: 1 });
+      store.createMessage({ sessionId: "s2", seq: 1, turnSeq: 1, role, content: "another session", tokenCount: 1 });
+
+      store.setTurnSummary("s1", 1, "first summary");
+      store.setTurnSummary("s1", 1, "replacement summary");
+
+      expect(store.getTurnSummaries("s1")).toEqual([{ turnSeq: 1, summary: "replacement summary" }]);
+      expect(store.getTurnSummaries("s2")).toEqual([]);
+      const anchors = db.prepare("SELECT seq FROM messages WHERE session_id = ? AND summary IS NOT NULL").all("s1");
+      expect(anchors).toEqual([{ seq: 1 }]);
+    });
+
     it("sets and gets turn summary", () => {
       store.createMessage({ sessionId: "s1", seq: 1, turnSeq: 1, role: "user", content: "q1", tokenCount: 1 });
       store.createMessage({ sessionId: "s1", seq: 2, turnSeq: 1, role: "assistant", content: "a1", tokenCount: 1 });
