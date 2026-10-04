@@ -8,13 +8,14 @@ import { SelectiveContextEngine } from "../engine.js";
 import { createSummarizer } from "../summarize.js";
 
 function resolveConfig(api: OpenClawPluginApi): SelectiveClawConfig {
-  const pluginConfig = api.config ?? {};
+  const pluginConfig = api.pluginConfig ?? {};
   const stateDir = process.env.OPENCLAW_STATE_DIR?.trim() || join(homedir(), ".openclaw");
+  const dbPath = pluginConfig.dbPath ?? join(stateDir, "selective-claw.db");
 
   return {
     enabled: pluginConfig.enabled ?? DEFAULT_CONFIG.enabled,
     freshTailTurns: pluginConfig.freshTailTurns ?? DEFAULT_CONFIG.freshTailTurns,
-    dbPath: pluginConfig.dbPath ?? join(stateDir, "selective-claw.db"),
+    dbPath: dbPath.startsWith("~/") ? join(homedir(), dbPath.slice(2)) : dbPath,
   };
 }
 
