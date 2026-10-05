@@ -182,6 +182,8 @@ def check(xlsx_path: str, sheet_filter: str | None = None) -> dict:
         sheet_files = get_sheet_files(z)
         valid_sheet_names = set(sheet_names.values())
         defined_names = get_defined_names(z)
+        sheet_lookup = {name.lower() for name in valid_sheet_names}
+        name_lookup = {name.lower() for name in defined_names}
 
         for rid, sheet_name in sheet_names.items():
             # Apply sheet filter if requested
@@ -262,7 +264,7 @@ def check(xlsx_path: str, sheet_filter: str | None = None) -> dict:
 
                     # Check 2: cross-sheet references
                     for ref_sheet in extract_sheet_refs(formula):
-                        if ref_sheet not in valid_sheet_names:
+                        if ref_sheet.lower() not in sheet_lookup:
                             results["errors"].append(
                                 {
                                     "type": "broken_sheet_ref",
@@ -278,7 +280,7 @@ def check(xlsx_path: str, sheet_filter: str | None = None) -> dict:
                     # Check 3: named range references
                     # Only flag if the name is not a built-in and not a sheet-prefixed ref
                     for name_ref in extract_name_refs(formula):
-                        if name_ref not in defined_names:
+                        if name_ref.lower() not in name_lookup:
                             results["errors"].append(
                                 {
                                     "type": "unknown_name_ref",
