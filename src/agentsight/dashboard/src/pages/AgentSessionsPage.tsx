@@ -117,6 +117,8 @@ export function mergeSessions(
       byId.get(t.session_id) ?? (uuid && uuid !== t.session_id ? byId.get(uuid) : undefined);
     if (existing) {
       existing.sources.push('log');
+      // A Codex log alias owns its children under the full rollout stem.
+      existing.subagent_count = Math.max(existing.subagent_count, subagentCount.get(t.session_id) ?? 0);
       existing.project = t.project || existing.project;
       existing.agent_name = existing.agent_name || t.agent_name;
       existing.model = existing.model || t.model_name;
