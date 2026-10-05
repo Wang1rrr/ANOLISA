@@ -84,6 +84,23 @@ confirm_destructive = true
 
 ---
 
+## Workbook named and print ranges
+
+The XLSX row-shift helper now updates direct references in `xl/workbook.xml` defined names, including print areas and repeated print-title rows:
+
+```bash
+python3 SKILL_DIR/scripts/xlsx_unpack.py input.xlsx /tmp/xlsx_work/
+python3 SKILL_DIR/scripts/xlsx_shift_rows.py /tmp/xlsx_work/ insert 5 2
+python3 SKILL_DIR/scripts/xlsx_pack.py /tmp/xlsx_work/ output.xlsx
+python3 SKILL_DIR/scripts/formula_check.py output.xlsx
+```
+
+As with the existing row shift, the operation applies to every worksheet in the unpacked workbook. A defined range `Sheet1!$A$3:$C$7` becomes `Sheet1!$A$3:$C$9`; print-title rows `$1:$6` become `$1:$8` for this insertion. Absolute markers, quoted sheet names, local/hidden name attributes and comma unions are preserved. Whole-column ranges remain unchanged. Deletion follows the existing endpoint-shift policy, clamping shifted rows to row 1.
+
+Only complete direct cell/range, whole-row or whole-column unions are supported. Complex formulas/constants, structured references, external workbooks, 3D sheet references and malformed/out-of-grid names remain unchanged for manual review; if one union component is unsupported, the entire definition is retained. Repack and inspect the result before using it. The helper does not calculate formulas, remove deleted row elements or provide sheet-specific shifting.
+
+---
+
 ## See Also
 
 - [Copilot Shell](copilot-shell/QUICKSTART.md)

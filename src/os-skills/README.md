@@ -130,6 +130,8 @@ Copy any skill directory to one of the skill search paths:
 4. Test the skill in Copilot Shell.
 5. Submit a pull request.
 
+Direct named and print ranges follow `xlsx_shift_rows.py`; see the [supported range forms](../../docs/user-guide/en/user-entrypoint/os-skills.md#workbook-named-and-print-ranges).
+
 ## License
 
 Apache License 2.0 — see [LICENSE](../../LICENSE) for details.

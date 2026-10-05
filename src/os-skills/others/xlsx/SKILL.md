@@ -56,6 +56,10 @@ Apply font colors per `format.md`.
 3. Only modify the specific cells the task asks for — everything else must be untouched.
 4. **After saving output.xlsx, verify it**: open with `xlsx_reader.py` or `pandas` and confirm the original sheet names and a sample of original data are present. If verification fails, you wrote the wrong file — fix it before delivering.
 
+The row-shift helper updates direct workbook named ranges and print ranges across all
+sheets. Complex expressions, external/3D references and out-of-grid definitions remain
+manual; see `references/edit.md` for supported forms.
+
 Never use openpyxl round-trip on existing files (corrupts VBA, pivots, sparklines).
 Instead: unpack → use helper scripts → repack.
 

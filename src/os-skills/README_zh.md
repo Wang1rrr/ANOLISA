@@ -127,6 +127,8 @@ sudo yum install os-skills
 4. 在 Copilot Shell 中测试技能。
 5. 提交 Pull Request。
 
+`xlsx_shift_rows.py` 会同步移动直接命名范围与打印范围，详见[支持的引用形式](../../docs/user-guide/zh/user-entrypoint/os-skills.md#工作簿命名范围与打印范围)。
+
 ## 许可证
 
 Apache License 2.0 — 详见 [LICENSE](../../LICENSE)。

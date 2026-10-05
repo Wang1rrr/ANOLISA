@@ -516,6 +516,12 @@ python3 SKILL_DIR/scripts/xlsx_shift_rows.py /tmp/xlsx_work/ delete 8 1
 
 The script updates in one pass: `<row r="...">` attributes, `<c r="...">` cell addresses, all `<f>` formula text across every worksheet, `<mergeCell>` ranges, `<conditionalFormatting sqref="...">`, `<dataValidation sqref="...">`, `<dimension ref="...">`, table `ref` attributes in `xl/tables/`, chart series ranges in `xl/charts/`, and pivot cache source ranges in `xl/pivotCaches/`.
 
+Direct defined-name and print ranges in `xl/workbook.xml` follow the same global shift:
+`Sheet1!$A$3:$C$7` becomes `Sheet1!$A$3:$C$9` when inserting two rows at row 5,
+and print-title rows `$1:$6` become `$1:$8`. Whole-column print titles remain unchanged.
+Quoted sheet names, absolute markers and local/hidden name attributes are preserved.
+Deletion uses the existing endpoint policy (shift rows >= the specified row, clamp to 1).
+
 **After running the shift script, always repack and validate:**
 ```bash
 python3 SKILL_DIR/scripts/xlsx_pack.py /tmp/xlsx_work/ output.xlsx
@@ -523,7 +529,7 @@ python3 SKILL_DIR/scripts/formula_check.py output.xlsx
 ```
 
 **What the script does NOT update (review manually):**
-- Named ranges in `xl/workbook.xml` `<definedNames>` — check and update if they reference shifted rows.
+- Complex formulas/constants, structured, external/3D or out-of-grid definitions in `xl/workbook.xml` `<definedNames>`. Direct cells/ranges, whole-row/whole-column ranges and comma unions are updated; an unsupported component leaves the entire union unchanged.
 - Structured table references (`Table[@Column]`) inside formulas.
 - External workbook links in `xl/externalLinks/`.
 

@@ -84,6 +84,23 @@ confirm_destructive = true
 
 ---
 
+## 工作簿命名范围与打印范围
+
+XLSX 行移动脚本现在更新 `xl/workbook.xml` 定义名称中的直接引用，包括打印区域和重复打印的标题行：
+
+```bash
+python3 SKILL_DIR/scripts/xlsx_unpack.py input.xlsx /tmp/xlsx_work/
+python3 SKILL_DIR/scripts/xlsx_shift_rows.py /tmp/xlsx_work/ insert 5 2
+python3 SKILL_DIR/scripts/xlsx_pack.py /tmp/xlsx_work/ output.xlsx
+python3 SKILL_DIR/scripts/formula_check.py output.xlsx
+```
+
+与原有行移动行为一致，操作作用于解包工作簿内所有工作表。上述插入将 `Sheet1!$A$3:$C$7` 改为 `Sheet1!$A$3:$C$9`，打印标题行 `$1:$6` 改为 `$1:$8`。绝对引用标记、带引号的工作表名称、本地或隐藏名称属性及逗号联合范围都会保留。整列范围不变。删除遵循现有端点移动策略，移动后的行号至少为 1。
+
+仅支持完整的直接单元格、矩形区域、整行或整列联合引用。复杂公式或常量、结构化引用、外部工作簿、三维工作表引用及无效或超出网格的名称保持原样，需人工检查；若联合引用中任一部分不支持，会保留整个定义。重新打包后先检查结果再使用。脚本不会计算公式、移除被删除的行元素，也不提供单工作表行移动。
+
+---
+
 ## 参见
 
 - [Copilot Shell](copilot-shell/QUICKSTART.md)
