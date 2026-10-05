@@ -124,7 +124,8 @@ swe-runner analyze-traces \
 swe-runner
 ├── run             运行实例并生成 patch
 ├── evaluate        调用 SWE-bench 官方 evaluator
-└── analyze-traces  补录 trace 并导出 CSV
+├── analyze-traces  补录 trace 并导出 CSV
+└── compare-traces  比较两份汇总 CSV 的每用例资源指标
 ```
 
 ## `swe-runner run`
@@ -435,6 +436,38 @@ swe-runner analyze-traces \
 | `--end` | `now` | 补录窗口结束时间 |
 | `--run-metadata` | 无 | `run` 命令生成的 `run_metadata.json` |
 
+## `swe-runner compare-traces`
+
+离线比较两次已记录运行的每用例平均指标：
+
+```bash
+swe-runner compare-traces \
+  --baseline ./baseline/analyze-traces/trace_summary.csv \
+  --candidate ./candidate/analyze-traces/trace_summary.csv \
+  --output ./comparison
+```
+
+UTF-8 CSV 写入 `./comparison/compare-traces/trace_comparison.csv`。输入沿用现有
+`trace_summary.csv` 表头和 UTF-8 编码，也接受 UTF-8 BOM 与额外汇总列。ID 必须唯一且
+非空，执行次数必须为正整数，token 和步骤均值必须为支持的浮点数范围内的有限非负值。
+输入无效时会在创建输出前停止。
+
+按完整实例 ID 对齐并排序，行状态为 `matched`、`baseline-only` 或 `candidate-only`，
+分别显示两次运行的执行次数。对于 `avg_input_tokens`、`avg_output_tokens`、
+`avg_total_tokens` 和 `avg_steps`，CSV 包含两次均值、`delta_<metric>`（candidate 减
+baseline）与 `pct_delta_<metric>`（差值除以 baseline 再乘 100，保留两位小数）。
+负差值表示测得的消耗较少。比较直接使用各运行导出的每次执行均值。
+
+未配对用例的缺失值和差值为空。两个均值都是零时，百分比差值为 `0.00`；baseline 为零
+而 candidate 为正时，百分比为空。完整结果以原子替换方式更新已有 comparison CSV，
+输入汇总文件会保留。
+
+| 参数 | 默认值 | 说明 |
+|---|---:|---|
+| `--baseline` | 必填 | baseline 的 `trace_summary.csv` |
+| `--candidate` | 必填 | candidate 的 `trace_summary.csv` |
+| `--output, -o` | `./output` | `compare-traces/trace_comparison.csv` 的输出根目录 |
+
 ## 输出目录
 
 默认输出根目录是 `./output`。每个命令会写入自己的子目录：
@@ -459,6 +492,8 @@ output/
 │   ├── swe-runner.evaluate.log
 │   ├── <model>.<run_id>.json
 │   └── logs/run_evaluation/<run_id>/<model>/<instance_id>/
+├── compare-traces/
+│   └── trace_comparison.csv
 └── analyze-traces/
     ├── swe-runner.analyze-traces.log
     ├── traces/
@@ -485,6 +520,7 @@ output/
 | `analyze-traces/trace_details/*.csv` | 每条 trace 的基础指标 |
 | `analyze-traces/trace_summary.csv` | 每个实例的汇总指标 |
 | `analyze-traces/trace_metrics/trace_metrics.csv` | 更细的 trace、工具调用和 token 指标 |
+| `compare-traces/trace_comparison.csv` | 两次运行汇总中每用例平均 token 和步骤数的差值 |
 
 ## 项目结构
 

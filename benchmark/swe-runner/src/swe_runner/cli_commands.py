@@ -28,12 +28,14 @@ from swe_runner.evaluation import run_evaluation as run_patch_evaluation
 from swe_runner.run.io.report import RunReport
 from swe_runner.run.session import RunSession
 from swe_runner.trace_extraction import TraceCollectionPlan, write_trace_analysis_csvs
+from swe_runner.trace_extraction.comparison import TraceComparisonResult, write_trace_comparison_csv
 
 logger = logging.getLogger(__name__)
 
 RUN_OUTPUT_SUBDIR = "run"
 EVALUATE_OUTPUT_SUBDIR = "evaluate"
 ANALYZE_TRACES_OUTPUT_SUBDIR = "analyze-traces"
+COMPARE_TRACES_OUTPUT_SUBDIR = "compare-traces"
 TOKENLESS_RUN_OPTION = "tokenless"
 
 
@@ -54,6 +56,12 @@ class TraceAnalysisCommandResult:
 def command_output_dir(output_root: Path, command_name: str) -> Path:
     """Return the per-command output directory under an output root."""
     return output_root / command_name
+
+
+def compare_traces_command(*, baseline: Path, candidate: Path, output: Path) -> TraceComparisonResult:
+    """Compare exported run summaries without collecting or executing traces."""
+    output_csv = command_output_dir(output, COMPARE_TRACES_OUTPUT_SUBDIR) / "trace_comparison.csv"
+    return write_trace_comparison_csv(baseline, candidate, output_csv)
 
 
 def run_instances_command(

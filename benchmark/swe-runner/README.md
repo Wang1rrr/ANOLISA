@@ -128,7 +128,8 @@ swe-runner analyze-traces \
 swe-runner
 ├── run             Run instances and generate patches
 ├── evaluate        Run the official SWE-bench evaluator
-└── analyze-traces  Collect traces and export CSV reports
+├── analyze-traces  Collect traces and export CSV reports
+└── compare-traces  Compare per-case budgets from two summary CSVs
 ```
 
 ## `swe-runner run`
@@ -445,6 +446,43 @@ swe-runner analyze-traces \
 | `--end` | `now` | Trace collection window end |
 | `--run-metadata` | none | `run_metadata.json` produced by `run` |
 
+## `swe-runner compare-traces`
+
+Compare the exported per-case means from two recorded runs offline:
+
+```bash
+swe-runner compare-traces \
+  --baseline ./baseline/analyze-traces/trace_summary.csv \
+  --candidate ./candidate/analyze-traces/trace_summary.csv \
+  --output ./comparison
+```
+
+The UTF-8 CSV is written to
+`./comparison/compare-traces/trace_comparison.csv`. Inputs use the existing
+`trace_summary.csv` headers and UTF-8 encoding; a UTF-8 BOM and extra summary
+columns are accepted. IDs must be unique and nonempty, execution counts must be
+positive integers, and token/step means must be finite, nonnegative values in
+the supported floating-point range. Invalid input stops before output creation.
+
+Rows align exact instance IDs in sorted order, with `matched`, `baseline-only`
+or `candidate-only` status and separate execution counts for both runs. For
+`avg_input_tokens`, `avg_output_tokens`, `avg_total_tokens` and `avg_steps`, the
+CSV contains both means, `delta_<metric>` (candidate minus baseline), and
+`pct_delta_<metric>` (100 times that difference divided by the baseline, rounded
+to two decimals). Negative differences indicate lower measured usage. Each
+run's exported per-execution mean is compared directly.
+
+Unpaired cases retain blank missing values and differences. When both means
+are zero, the percentage difference is `0.00`; a zero baseline with a positive
+candidate mean leaves the percentage blank. Complete output replaces an
+existing comparison CSV atomically. Input summaries are preserved.
+
+| Option | Default | Description |
+|---|---:|---|
+| `--baseline` | required | Baseline `trace_summary.csv` |
+| `--candidate` | required | Candidate `trace_summary.csv` |
+| `--output, -o` | `./output` | Output root for `compare-traces/trace_comparison.csv` |
+
 ## Output Layout
 
 The default output root is `./output`. Each command writes to its own subdir:
@@ -469,6 +507,8 @@ output/
 │   ├── swe-runner.evaluate.log
 │   ├── <model>.<run_id>.json
 │   └── logs/run_evaluation/<run_id>/<model>/<instance_id>/
+├── compare-traces/
+│   └── trace_comparison.csv
 └── analyze-traces/
     ├── swe-runner.analyze-traces.log
     ├── traces/
@@ -495,6 +535,7 @@ Important files:
 | `analyze-traces/trace_details/*.csv` | Per-trace basic metrics |
 | `analyze-traces/trace_summary.csv` | Per-instance summary metrics |
 | `analyze-traces/trace_metrics/trace_metrics.csv` | Detailed trace, tool-call, and token metrics |
+| `compare-traces/trace_comparison.csv` | Per-case mean token/step differences between two exported run summaries |
 
 ## Project Structure
 
