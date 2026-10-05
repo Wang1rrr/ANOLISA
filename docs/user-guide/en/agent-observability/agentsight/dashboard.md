@@ -146,6 +146,14 @@ The export omits tool content and uses UTF-8 with a BOM for spreadsheet compatib
 Text beginning with a spreadsheet formula prefix is prefixed with an apostrophe.
 Export is disabled while querying, after a query error, or when there are no sessions.
 
+Use the session checkboxes to choose a subset, or the heading checkbox to select or
+clear all displayed sessions. **Export selected CSV (n)** downloads only that subset
+in displayed order using the same CSV fields and units. Selecting a checkbox keeps
+the session details as they are and does not send another query. A new successful
+query clears the selection, including when the same sessions appear again. The
+selected export is disabled without a selection and follows the same loading/error
+rules as the complete export.
+
 ## Optimization
 
 Runs LLM-assisted analysis over one session in six dimensions: `perf`, `perf-issues`, `cost`,

@@ -382,7 +382,10 @@ const SessionRow: React.FC<{
   session: SessionSavings;
   initialExpanded?: boolean;
   rowRef?: React.Ref<HTMLTableRowElement>;
-}> = ({ session, initialExpanded = false, rowRef }) => {
+  selected: boolean;
+  selectionDisabled: boolean;
+  onToggleSelection: () => void;
+}> = ({ session, initialExpanded = false, rowRef, selected, selectionDisabled, onToggleSelection }) => {
   const { t } = useI18n();
   const locale = useLocaleTag();
   const [expanded, setExpanded] = useState(initialExpanded);
@@ -396,6 +399,17 @@ const SessionRow: React.FC<{
         }`}
         onClick={() => setExpanded(!expanded)}
       >
+        <td className="px-4 py-4 w-12">
+          <input
+            type="checkbox"
+            checked={selected}
+            disabled={selectionDisabled}
+            aria-label={t('ts.selectSession', { id: session.session_id })}
+            onClick={(event) => event.stopPropagation()}
+            onChange={onToggleSelection}
+            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+        </td>
         <td className="px-4 lg:px-6 py-4">
           <div className="flex items-center gap-2">
             <span className="text-gray-400 text-xs flex-shrink-0">
@@ -442,7 +456,7 @@ const SessionRow: React.FC<{
       {/* Expanded detail */}
       {expanded && (
         <tr className="bg-blue-50">
-          <td colSpan={6} className="px-4 lg:px-8 py-4">
+          <td colSpan={7} className="px-4 lg:px-8 py-4">
             {/* Optimization items table */}
             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
               <table className="w-full min-w-[700px]">
@@ -506,6 +520,7 @@ export const TokenSavingsPage: React.FC = () => {
 
   // API data state
   const [sessions, setSessions] = useState<SessionSavings[]>([]);
+  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
   const [summary, setSummary] = useState<SavingsSummary | null>(null);
   const [statsAvailable, setStatsAvailable] = useState(true);
   const [tips, setTips] = useState<OptimizationTip[]>([]);
@@ -532,6 +547,7 @@ export const TokenSavingsPage: React.FC = () => {
       const endNs = endMs * 1_000_000;
       const resp = await fetchTokenSavings(startNs, endNs, selectedAgent || undefined);
       setSessions(resp.sessions);
+      setSelectedSessionIds(new Set());
       setSummary(resp.summary);
       setStatsAvailable(resp.stats_available);
       setTips(resp.optimization_tips ?? []);
@@ -567,6 +583,18 @@ export const TokenSavingsPage: React.FC = () => {
   const totalCompoundedToolSaved = summary?.total_compounded_tool_saved ?? 0;
   const totalCompoundedMcpSaved = summary?.total_compounded_mcp_saved ?? 0;
   const savingsRate = baselineTokens > 0 ? (totalCompoundedSaved / baselineTokens) * 100 : 0;
+  const selectedSessions = sessions.filter(session => selectedSessionIds.has(session.session_id));
+  const allSelected = sessions.length > 0 && selectedSessions.length === sessions.length;
+  const selectionDisabled = loading || !!error;
+
+  const toggleSelection = (sessionId: string) => {
+    setSelectedSessionIds(previous => {
+      const next = new Set(previous);
+      if (next.has(sessionId)) next.delete(sessionId);
+      else next.add(sessionId);
+      return next;
+    });
+  };
 
   return (
     <main className="max-w-screen-xl mx-auto px-6 py-6 space-y-6">
@@ -854,7 +882,15 @@ export const TokenSavingsPage: React.FC = () => {
 
       {/* ── Session table ── */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="flex justify-end px-4 py-3 border-b border-gray-200">
+        <div className="flex flex-wrap justify-end gap-2 px-4 py-3 border-b border-gray-200">
+          <button
+            type="button"
+            onClick={() => downloadSavingsCsv(selectedSessions)}
+            disabled={selectionDisabled || selectedSessions.length === 0}
+            className="px-3 py-1.5 text-sm rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {t('ts.exportSelectedCsv', { n: selectedSessions.length })}
+          </button>
           <button
             type="button"
             onClick={() => downloadSavingsCsv(sessions)}
@@ -865,9 +901,21 @@ export const TokenSavingsPage: React.FC = () => {
           </button>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[800px]">
+          <table className="w-full min-w-[850px]">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
+                <th className="px-4 py-3 w-12">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    disabled={selectionDisabled || sessions.length === 0}
+                    aria-label={t('ts.selectAllSessions')}
+                    aria-checked={selectedSessions.length > 0 && !allSelected ? 'mixed' : allSelected}
+                    ref={node => { if (node) node.indeterminate = selectedSessions.length > 0 && !allSelected; }}
+                    onChange={event => setSelectedSessionIds(event.target.checked ? new Set(sessions.map(session => session.session_id)) : new Set())}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                </th>
                 <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
                   <span className="inline-flex items-center gap-1.5">
                     <span>{t('ts.sessionId')}</span>
@@ -898,6 +946,9 @@ export const TokenSavingsPage: React.FC = () => {
                   session={sess}
                   initialExpanded={sess.session_id === expandedSessionId}
                   rowRef={sess.session_id === expandedSessionId ? targetRowRef : undefined}
+                  selected={selectedSessionIds.has(sess.session_id)}
+                  selectionDisabled={selectionDisabled}
+                  onToggleSelection={() => toggleSelection(sess.session_id)}
                 />
               ))}
             </tbody>
