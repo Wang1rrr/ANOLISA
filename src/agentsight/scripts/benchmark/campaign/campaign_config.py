@@ -39,6 +39,16 @@ def safety_settings(campaign: dict[str, Any]) -> dict[str, int]:
     }
 
 
+def finite_number(value: Any) -> bool:
+    """Validate JSON numeric values without overflowing float conversion."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
 def validate_campaign(campaign: dict[str, Any]) -> None:
     """Reject incomplete, unsafe, or internally inconsistent campaign inputs."""
     if campaign.get("schema_version") != 1:
@@ -74,12 +84,7 @@ def validate_campaign(campaign: dict[str, Any]) -> None:
         raise ValueError(f"missing frozen thresholds: {', '.join(sorted(missing))}")
     for name in REQUIRED_THRESHOLDS:
         value = thresholds[name]
-        if (
-            isinstance(value, bool)
-            or not isinstance(value, (int, float))
-            or not math.isfinite(value)
-            or value < 0
-        ):
+        if not finite_number(value) or value < 0:
             raise ValueError(f"thresholds.{name} must be a finite non-negative number")
     for name in (
         "min_throughput_ratio",
@@ -91,28 +96,22 @@ def validate_campaign(campaign: dict[str, Any]) -> None:
         if thresholds[name] > 1:
             raise ValueError(f"thresholds.{name} must be a ratio between 0 and 1")
     capacity = campaign.get("capacity", {})
-    if capacity.get("qps_start", 0) <= 0 or capacity.get("qps_resolution", 0) <= 0:
-        raise ValueError("capacity qps_start and qps_resolution must be positive")
-    if capacity.get("qps_safety_max", 0) < capacity["qps_start"]:
-        raise ValueError("capacity qps_safety_max must be at least qps_start")
-    if capacity.get("qps_safety_max", 0) < capacity.get("qps_resolution", 0):
-        raise ValueError("capacity qps_safety_max must be at least qps_resolution")
+    if not isinstance(capacity, dict):
+        raise TypeError("capacity must be an object")
     search_start_ratio = capacity.get("search_start_ratio")
-    if (
-        isinstance(search_start_ratio, bool)
-        or not isinstance(search_start_ratio, (int, float))
-        or not math.isfinite(search_start_ratio)
-        or search_start_ratio != 0.8
-    ):
+    if not finite_number(search_start_ratio) or search_start_ratio != 0.8:
         raise ValueError("capacity.search_start_ratio must be 0.8")
-    matrix_qps = campaign.get("matrix", {}).get("qps", [])
-    if matrix_qps and (len(matrix_qps) != 5 or len(set(matrix_qps)) != 5):
-        raise ValueError("matrix.qps must be empty or contain five unique values")
-    if matrix_qps and any(
+    matrix = campaign.get("matrix")
+    if not isinstance(matrix, dict):
+        raise TypeError("matrix must be an object")
+    matrix_qps = matrix.get("qps", [])
+    if not isinstance(matrix_qps, list) or any(
         isinstance(value, bool) or not isinstance(value, int) or value <= 0
         for value in matrix_qps
     ):
-        raise ValueError("matrix.qps values must be positive integers")
+        raise ValueError("matrix.qps must be a list of positive integers")
+    if matrix_qps and (len(matrix_qps) != 5 or len(set(matrix_qps)) != 5):
+        raise ValueError("matrix.qps must be empty or contain five unique values")
     positive_fields = {
         "smoke": ("qps", "duration_seconds"),
         "capacity": (
@@ -143,6 +142,10 @@ def validate_campaign(campaign: dict[str, Any]) -> None:
             value = settings.get(field)
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
                 raise ValueError(f"{section}.{field} must be a positive integer")
+    if capacity["qps_safety_max"] < capacity["qps_start"]:
+        raise ValueError("capacity qps_safety_max must be at least qps_start")
+    if capacity["qps_safety_max"] < capacity["qps_resolution"]:
+        raise ValueError("capacity qps_safety_max must be at least qps_resolution")
     for section, field in (
         ("capacity", "pretest_warmup_seconds"),
         ("capacity", "probe_warmup_seconds"),
@@ -171,7 +174,7 @@ def validate_campaign(campaign: dict[str, Any]) -> None:
         )
     recovery = campaign["recovery"]
     tolerance = recovery.get("tolerance_ratio")
-    if not isinstance(tolerance, (int, float)) or not 0 <= tolerance < 1:
+    if not finite_number(tolerance) or not 0 <= tolerance < 1:
         raise ValueError("recovery.tolerance_ratio must be in [0, 1)")
     if recovery["recovery_window_seconds"] > recovery["recover_seconds"]:
         raise ValueError("recovery window cannot exceed the recovery phase")
