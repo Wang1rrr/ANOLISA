@@ -13,7 +13,19 @@ vi.mock("child_process", () => {
   return { execFile: fn };
 });
 
+vi.mock("fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("fs")>();
+  return {
+    ...actual,
+    mkdtempSync: vi.fn(actual.mkdtempSync),
+    writeFileSync: vi.fn(actual.writeFileSync),
+  };
+});
+
 import { execFile } from "child_process";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "fs";
+import { rmdirSync, unlinkSync, writeFileSync as realWriteFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { CommandExecutor } from "../commands.js";
 
 const promisifiedMock = (execFile as any)[
@@ -269,6 +281,71 @@ describe("CommandExecutor", () => {
 describe("runCrontab", () => {
   // runCrontab uses execFile directly (not the CommandExecutor class),
   // but the same child_process mock applies.
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns structured output when temporary directory creation fails", async () => {
+    vi.mocked(mkdtempSync).mockImplementationOnce(() => {
+      throw Object.assign(new Error("temporary filesystem is full"), { code: "ENOSPC" });
+    });
+    const { runCrontab } = await import("../commands.js");
+    const result = await runCrontab(["-"], { input: "line1\n" });
+    expect(result).toEqual({ exitCode: 1, stdout: "", stderr: "temporary filesystem is full" });
+    expect(promisifiedMock).not.toHaveBeenCalled();
+  });
+
+  it("removes the created directory when writing the temporary file fails", async () => {
+    vi.mocked(writeFileSync).mockImplementationOnce(() => {
+      throw new Error("unable to write crontab input");
+    });
+    const { runCrontab } = await import("../commands.js");
+    const result = await runCrontab(["-"], { input: "line1\n" });
+    const createdDir = vi.mocked(mkdtempSync).mock.results[0].value as string;
+    try {
+      expect(result).toEqual({ exitCode: 1, stdout: "", stderr: "unable to write crontab input" });
+      expect(promisifiedMock).not.toHaveBeenCalled();
+      expect(existsSync(createdDir)).toBe(false);
+    } finally {
+      if (existsSync(createdDir)) rmdirSync(createdDir);
+    }
+  });
+
+  it("removes a partially written file and directory after a write failure", async () => {
+    let file = "";
+    vi.mocked(writeFileSync).mockImplementationOnce((target) => {
+      file = String(target);
+      realWriteFileSync(file, "partial");
+      throw new Error("partial write");
+    });
+    const { runCrontab } = await import("../commands.js");
+    const result = await runCrontab(["-"], { input: "line1\n" });
+    try {
+      expect(result.stderr).toBe("partial write");
+      expect(promisifiedMock).not.toHaveBeenCalled();
+      expect(existsSync(file)).toBe(false);
+      expect(existsSync(dirname(file))).toBe(false);
+    } finally {
+      if (existsSync(file)) unlinkSync(file);
+      if (existsSync(dirname(file))) rmdirSync(dirname(file));
+    }
+  });
+
+  it("passes the complete input to the CLI and cleans up after successful execution", async () => {
+    let file = "";
+    promisifiedMock.mockImplementationOnce(async (binary, args) => {
+      expect(binary).toBe("crontab");
+      file = args[0];
+      expect(readFileSync(file, "utf-8")).toBe("line1\nline2\n");
+      return { stdout: "installed", stderr: "" };
+    });
+    const { runCrontab } = await import("../commands.js");
+    const result = await runCrontab(["-"], { input: "line1\nline2\n" });
+    expect(result).toEqual({ exitCode: 0, stdout: "installed", stderr: "" });
+    expect(existsSync(file)).toBe(false);
+    expect(existsSync(dirname(file))).toBe(false);
+  });
 
   it("runs crontab -l successfully", async () => {
     promisifiedMock.mockResolvedValue({ stdout: "line1\n", stderr: "" });

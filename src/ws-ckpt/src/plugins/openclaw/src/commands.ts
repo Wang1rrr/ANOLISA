@@ -313,9 +313,11 @@ export async function runCrontab(
   const timeout = opts?.timeout ?? 10_000;
 
   if (opts?.input !== undefined) {
-    const tmpDir = mkdtempSync(join(tmpdir(), "ws-ckpt-cron-"));
-    const tmpFile = join(tmpDir, "crontab");
+    let tmpDir: string | undefined;
+    let tmpFile: string | undefined;
     try {
+      tmpDir = mkdtempSync(join(tmpdir(), "ws-ckpt-cron-"));
+      tmpFile = join(tmpDir, "crontab");
       writeFileSync(tmpFile, opts.input, "utf-8");
       const { stdout, stderr } = await execFileAsync("crontab", [tmpFile], {
         timeout,
@@ -335,7 +337,12 @@ export async function runCrontab(
         stderr: err.stderr ?? err.message ?? "Unknown command error",
       };
     } finally {
-      try { unlinkSync(tmpFile); rmdirSync(tmpDir); } catch { /* cleanup best-effort */ }
+      if (tmpFile) {
+        try { unlinkSync(tmpFile); } catch { /* file may not have been created */ }
+      }
+      if (tmpDir) {
+        try { rmdirSync(tmpDir); } catch { /* cleanup best-effort */ }
+      }
     }
   }
 
