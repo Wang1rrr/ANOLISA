@@ -188,7 +188,9 @@ def counter_delta(values: list[float]) -> int:
         return 0
     total = 0.0
     for previous, current in pairwise(values):
-        total += max(0.0, current - previous)
+        total += (
+            max(0.0, current - previous) if current >= previous else max(0.0, current)
+        )
     return int(total)
 
 
