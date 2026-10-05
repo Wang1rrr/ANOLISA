@@ -76,6 +76,34 @@ def col_letter(n: int) -> str:
     return r
 
 
+def update_dimension(root: ET.Element) -> None:
+    """Expand the existing used range to contain all worksheet cells."""
+    dimension = root.find(_tag("dimension"))
+    references = []
+    if dimension is not None:
+        references.extend(dimension.get("ref", "").split(":"))
+    sheet_data = root.find(_tag("sheetData"))
+    if sheet_data is not None:
+        references.extend(cell.get("r", "") for cell in sheet_data.iter(_tag("c")))
+
+    bounds = []
+    for reference in references:
+        match = re.fullmatch(r"\$?([A-Za-z]+)\$?([1-9][0-9]*)", reference)
+        if match:
+            bounds.append((col_number(match.group(1)), int(match.group(2))))
+    if not bounds:
+        return
+    first = f"{col_letter(min(column for column, _ in bounds))}{min(row for _, row in bounds)}"
+    last = f"{col_letter(max(column for column, _ in bounds))}{max(row for _, row in bounds)}"
+    reference = first if first == last else f"{first}:{last}"
+    if dimension is None:
+        dimension = ET.Element(_tag("dimension"))
+        # A worksheet dimension follows optional sheetPr and precedes sheetViews.
+        position = 1 if len(root) and root[0].tag == _tag("sheetPr") else 0
+        root.insert(position, dimension)
+    dimension.set("ref", reference)
+
+
 def find_ws_path(work_dir: str, sheet_name: str | None) -> str:
     wb_tree = ET.parse(os.path.join(work_dir, "xl", "workbook.xml"))
     rid = None
@@ -353,17 +381,9 @@ def main() -> None:
         changes += 1
         print(f"  {col}{args.total_row} = ={total_f} (style={total_style})")
 
-    # Update dimension
-    for dim in root.iter(_tag("dimension")):
-        old_ref = dim.get("ref", "")
-        if ":" in old_ref:
-            start_ref, end_ref = old_ref.split(":")
-            end_col_str = re.match(r"([A-Z]+)", end_ref).group(1)
-            end_row_str = re.search(r"(\d+)", end_ref).group(1)
-            if col_number(col) > col_number(end_col_str):
-                new_ref = f"{start_ref}:{col}{end_row_str}"
-                dim.set("ref", new_ref)
-                print(f"  Dimension: {old_ref} → {new_ref}")
+    # Only newly written cells can expand the worksheet's used range.
+    if changes:
+        update_dimension(root)
 
     # Extend <cols> to cover new column
     cols_el = root.find(_tag("cols"))
