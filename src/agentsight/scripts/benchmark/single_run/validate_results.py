@@ -33,18 +33,27 @@ def load_expected(path: Path) -> tuple[set[str], set[str]]:
     expected: set[str] = set()
     successful: set[str] = set()
     for item in json_lines(path):
-        tags = item.get("data", {}).get("tags", {})
+        data = item.get("data", {})
+        if not isinstance(data, dict):
+            continue
+        tags = data.get("tags", {})
+        if not isinstance(tags, dict):
+            tags = {}
         request_id = item.get("request_id") or tags.get("request_id")
         if not request_id:
             continue
         request_id = str(request_id)
         expected.add(request_id)
         metric = item.get("metric")
-        value = item.get("data", {}).get("value")
-        status = item.get("data", {}).get("status")
+        value = data.get("value")
+        status = data.get("status")
         if metric == "benchmark_http_success" and value:
             successful.add(request_id)
-        if status is not None and 200 <= int(status) < 300:
+        try:
+            status_code = int(status) if status is not None else None
+        except (TypeError, ValueError, OverflowError):
+            status_code = None
+        if status_code is not None and 200 <= status_code < 300:
             successful.add(request_id)
     return expected, successful
 
