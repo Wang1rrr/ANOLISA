@@ -82,7 +82,7 @@ def load_captured(
 ) -> Captured:
     """Find captured IDs, narrowing indexed queries to the current run."""
     captured: dict[str, list[tuple[str, int | None]]] = {}
-    uri = f"file:{db_path}?mode=ro"
+    uri = f"{db_path.resolve().as_uri()}?mode=ro"
     with sqlite3.connect(uri, uri=True, timeout=0.5) as connection:
         tables = {
             row[0]
@@ -180,7 +180,7 @@ def load_captured_incremental(
     next_genai_id = genai_after_id
     next_token_rowid = token_after_rowid
     next_pending_ids = set(pending_genai_ids)
-    uri = f"file:{db_path}?mode=ro"
+    uri = f"{db_path.resolve().as_uri()}?mode=ro"
     with sqlite3.connect(uri, uri=True, timeout=0.5) as connection:
         tables = {
             row[0]
