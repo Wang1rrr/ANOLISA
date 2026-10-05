@@ -27,41 +27,50 @@ export const AgentHealthNotifier: React.FC = () => {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000);
   }, []);
 
-  const poll = useCallback(async () => {
-    try {
-      const data = await fetchAgentProcessHealth({ includeClients: true });
-      const agents = Array.isArray(data?.agents) ? data.agents : [];
-
-      // 检测新增异常退出（仅 has_crash=true 的才通知）和卡顿 agent
-      agents.forEach(a => {
-        if (a.status === 'offline' && a.has_crash && !notifiedRef.current.has(a.pid)) {
-          notifiedRef.current.add(a.pid);
-          addToast(t('comp.agentHealth.crashToast', { name: a.agent_name, pid: a.pid }));
-        }
-        if (a.status === 'hung' && !notifiedRef.current.has(-a.pid)) {
-          notifiedRef.current.add(-a.pid);
-          addToast(t('comp.agentHealth.hungToast', { name: a.agent_name, pid: a.pid }));
-        }
-      });
-      // 清理不再存在的 PID
-      const currentPids = new Set(agents.map(a => a.pid));
-      notifiedRef.current.forEach(pid => {
-        if (!currentPids.has(Math.abs(pid))) notifiedRef.current.delete(pid);
-      });
-      // 如果 hung 进程恢复正常，清除其 hung 通知记录
-      agents.forEach(a => {
-        if (a.status !== 'hung') notifiedRef.current.delete(-a.pid);
-      });
-    } catch {
-      // 通知是尽力而为的能力，接口失败时静默跳过本轮
-    }
-  }, [addToast, t]);
-
   useEffect(() => {
+    let active = true;
+    let requestId = 0;
+    let appliedRequestId = 0;
+    const poll = async () => {
+      if (!active) return;
+      const currentRequestId = ++requestId;
+      try {
+        const data = await fetchAgentProcessHealth({ includeClients: true });
+        // Keep retrying stalled requests without allowing obsolete snapshots.
+        if (!active || currentRequestId < appliedRequestId) return;
+        appliedRequestId = currentRequestId;
+        const agents = Array.isArray(data?.agents) ? data.agents : [];
+
+        agents.forEach(a => {
+          if (a.status === 'offline' && a.has_crash && !notifiedRef.current.has(a.pid)) {
+            notifiedRef.current.add(a.pid);
+            addToast(t('comp.agentHealth.crashToast', { name: a.agent_name, pid: a.pid }));
+          }
+          if (a.status === 'hung' && !notifiedRef.current.has(-a.pid)) {
+            notifiedRef.current.add(-a.pid);
+            addToast(t('comp.agentHealth.hungToast', { name: a.agent_name, pid: a.pid }));
+          }
+        });
+        const currentPids = new Set(agents.map(a => a.pid));
+        notifiedRef.current.forEach(pid => {
+          if (!currentPids.has(Math.abs(pid))) notifiedRef.current.delete(pid);
+        });
+        // Recovery ends an anomaly episode, so a later occurrence can notify.
+        agents.forEach(a => {
+          if (a.status !== 'hung') notifiedRef.current.delete(-a.pid);
+          if (a.status !== 'offline' || !a.has_crash) notifiedRef.current.delete(a.pid);
+        });
+      } catch {
+        // Notifications are best effort; retry on the next polling interval.
+      }
+    };
     void poll();
     const timer = setInterval(poll, 10_000);
-    return () => clearInterval(timer);
-  }, [poll]);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [addToast, t]);
 
   return (
     <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 pointer-events-none">

@@ -36,11 +36,12 @@ try {
       'src/utils/savingsCsv.ts',
       'src/pages/security/utils.ts',
       'src/pages/LoginPage.tsx',
+      'src/components/AgentHealthNotifier.tsx',
       'tests/apiClient-globals.d.ts',
     ],
     { stdio: 'inherit' },
   );
-  execFileSync('node', ['--test', 'tests/apiClient-regression.test.cjs', 'tests/login-regression.test.cjs', 'tests/savings-csv-regression.test.cjs'], {
+  execFileSync('node', ['--test', 'tests/apiClient-regression.test.cjs', 'tests/login-regression.test.cjs', 'tests/savings-csv-regression.test.cjs', 'tests/health-notifier-regression.test.cjs'], {
     env: {
       ...process.env,
       AGENTSIGHT_API_CLIENT_BUILD: join(outputDir, 'utils', 'apiClient.js'),
@@ -53,6 +54,7 @@ try {
       AGENTSIGHT_SAVINGS_CSV_BUILD: join(outputDir, 'utils', 'savingsCsv.js'),
       AGENTSIGHT_SECURITY_UTILS_BUILD: join(outputDir, 'pages', 'security', 'utils.js'),
       AGENTSIGHT_LOGIN_PAGE_BUILD: join(outputDir, 'pages', 'LoginPage.js'),
+      AGENTSIGHT_HEALTH_NOTIFIER_BUILD: join(outputDir, 'components', 'AgentHealthNotifier.js'),
     },
     stdio: 'inherit',
   });
