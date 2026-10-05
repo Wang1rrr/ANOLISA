@@ -13,10 +13,12 @@ Requirements:
 The resulting xlsx is a valid ZIP archive with correct OOXML structure.
 """
 
-import sys
 import os
-import zipfile
+import shutil
+import sys
+import tempfile
 import xml.etree.ElementTree as ET
+import zipfile
 
 
 def validate_xml_files(source_dir: str) -> list[str]:
@@ -64,15 +66,26 @@ def pack(source_dir: str, xlsx_path: str) -> None:
 
     print("✓ All XML files are well-formed")
 
-    # Count files to pack
-    file_count = sum(len(files) for _, _, files in os.walk(source_dir))
+    # Snapshot members before creating temporary output, so it cannot be included.
+    members = []
+    for dirpath, _, filenames in os.walk(source_dir):
+        for fname in filenames:
+            fpath = os.path.join(dirpath, fname)
+            members.append((fpath, os.path.relpath(fpath, source_dir)))
+    file_count = len(members)
 
-    with zipfile.ZipFile(xlsx_path, "w", compression=zipfile.ZIP_DEFLATED) as z:
-        for dirpath, _, filenames in os.walk(source_dir):
-            for fname in filenames:
-                fpath = os.path.join(dirpath, fname)
-                arcname = os.path.relpath(fpath, source_dir)
+    # Follow existing output symlinks and publish only a fully closed archive.
+    destination = os.path.realpath(xlsx_path)
+    with tempfile.TemporaryDirectory(
+        prefix=".xlsx-pack-", dir=os.path.dirname(destination)
+    ) as staging:
+        temporary = os.path.join(staging, "workbook.xlsx")
+        with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED) as z:
+            for fpath, arcname in members:
                 z.write(fpath, arcname)
+        if os.path.exists(destination):
+            shutil.copymode(destination, temporary)
+        os.replace(temporary, destination)
 
     size = os.path.getsize(xlsx_path)
     print(f"Packed {file_count} files → '{xlsx_path}' ({size:,} bytes)")
