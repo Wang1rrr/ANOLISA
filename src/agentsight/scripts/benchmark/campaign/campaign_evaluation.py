@@ -2,17 +2,27 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 
-def metric(summary: dict[str, Any], *keys: str) -> float | bool | None:
-    """Read a nested summary value."""
+def metric(
+    summary: dict[str, Any], *keys: str, boolean: bool = False
+) -> float | bool | None:
+    """Read a finite numeric measurement or an exact boolean gate."""
     value: Any = summary
     for key in keys:
         if not isinstance(value, dict):
             return None
         value = value.get(key)
-    return value if isinstance(value, (int, float, bool)) else None
+    if boolean:
+        return value if isinstance(value, bool) else None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    try:
+        return value if math.isfinite(value) else None
+    except OverflowError:
+        return None
 
 
 def evaluate(
@@ -21,15 +31,16 @@ def evaluate(
     """Apply frozen capacity gates, treating missing measurements as inconclusive."""
     input_qps = metric(summary, "input_qps")
     effective_qps = metric(summary, "effective_qps")
+    ratio = (
+        effective_qps / input_qps
+        if input_qps is not None and input_qps > 0 and effective_qps is not None
+        else None
+    )
+    if ratio is not None and not math.isfinite(ratio):
+        ratio = None
     checks = {
         "throughput_ratio": (
-            (
-                effective_qps / input_qps
-                if isinstance(input_qps, (int, float))
-                and input_qps > 0
-                and isinstance(effective_qps, (int, float))
-                else None
-            ),
+            ratio,
             ">=",
             thresholds["min_throughput_ratio"],
         ),
@@ -63,8 +74,12 @@ def evaluate(
             "<=",
             thresholds["max_rss_mb"],
         ),
-        "process_survived": (metric(summary, "process_survived"), "==", True),
-        "runtime_clean": (metric(summary, "runtime_clean"), "==", True),
+        "process_survived": (
+            metric(summary, "process_survived", boolean=True),
+            "==",
+            True,
+        ),
+        "runtime_clean": (metric(summary, "runtime_clean", boolean=True), "==", True),
     }
     if scenario == "soak":
         checks["rss_slope_mb_per_hour"] = (
@@ -102,7 +117,9 @@ def evaluate(
         passed = (
             value >= expected
             if operator == ">="
-            else value <= expected if operator == "<=" else value == expected
+            else value <= expected
+            if operator == "<="
+            else value == expected
         )
         if not passed:
             failed.append(name)
