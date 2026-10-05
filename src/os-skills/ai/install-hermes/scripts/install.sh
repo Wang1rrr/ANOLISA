@@ -98,6 +98,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Hermes subprocesses resolve their data directory through this environment variable.
+export HERMES_HOME
+
 # ============================================================================
 # Helper functions
 # ============================================================================
